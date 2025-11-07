@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "@/lib/db"; // ✅ fixed
-import { verifyToken } from "@/lib/jwt"; // ✅ fixed
-import { buildPdf } from "@/lib/pdf"; // ✅ fixed
+import { sql } from "../../../../../lib/db";   // 👈 relative
+import { verifyToken } from "../../../../../lib/jwt"; // 👈 relative
+import { buildPdf } from "../../../../../lib/pdf"; // 👈 relative
 import crypto from "crypto";
 import { put } from "@vercel/blob";
 import { Resend } from "resend";

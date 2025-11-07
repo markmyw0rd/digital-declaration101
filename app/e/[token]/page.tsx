@@ -1,6 +1,13 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import { StudentCard, SupervisorCard, AssessorDeclaration, Checklist, Outcome, Section } from "@/components/FormCards"; // ✅ fixed import
+import { useEffect, useState } from "react";
+import {
+  StudentCard,
+  SupervisorCard,
+  AssessorDeclaration,
+  Checklist,
+  Outcome,
+  Section,
+} from "../../../components/FormCards"; // 👈 relative
 
 export default function Envelope({ params }: { params: { token: string } }) {
   const [env, setEnv] = useState<any>(null);
@@ -16,8 +23,7 @@ export default function Envelope({ params }: { params: { token: string } }) {
       const g = await fetch(`/api/envelopes/${j.envId}`, {
         headers: { authorization: `Bearer ${token}` },
       });
-      const env = await g.json();
-      setEnv(env);
+      setEnv(await g.json());
     })();
   }, [token]);
 
