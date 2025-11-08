@@ -4,9 +4,7 @@ import { verifyToken } from "../../../../../lib/jwt";
 import { buildPdf } from "../../../../../lib/pdf";
 import crypto from "crypto";
 import { put } from "@vercel/blob";
-import { Resend } from "resend";
-
-const resend = new Resend(process.env.RESEND_API_KEY!);
+import { sendFinalPdf } from "../../../../../lib/email";
 
 export async function POST(
   req: NextRequest,
@@ -26,7 +24,7 @@ export async function POST(
     WHERE envelope_id=${params.id} AND role='assessor'
   `;
 
-  // ⬇️ Save assessor outcome into jsonb (stringify to satisfy 'Primitive')
+  // Save outcome to jsonb (stringified -> Primitive)
   const outcomeJson = JSON.stringify({ assessorOutcome: outcome });
   await sql`
     INSERT INTO form_data (envelope_id, json)
@@ -35,10 +33,10 @@ export async function POST(
     DO UPDATE SET json = form_data.json || EXCLUDED.json
   `;
 
-  // Mark envelope completed
+  // Complete envelope
   await sql`UPDATE envelopes SET status='completed' WHERE id=${params.id}`;
 
-  // Gather data for PDF + emails
+  // Gather data for PDF + recipients
   const parties = await sql`
     SELECT role, email, signed_at, signature_blob_url
     FROM envelope_parties
@@ -51,7 +49,7 @@ export async function POST(
   const pdfBytes = await buildPdf({ parties: parties.rows, form: fd.rows[0]?.json || {} });
   const sha256 = crypto.createHash("sha256").update(pdfBytes).digest("hex");
 
-  // Store PDF in Blob
+  // Store PDF
   const blob = await put(`pdf/${params.id}-final.pdf`, Buffer.from(pdfBytes), {
     access: "public",
     contentType: "application/pdf",
@@ -63,15 +61,10 @@ export async function POST(
   `;
   await sql`UPDATE envelopes SET final_pdf_url=${blob.url} WHERE id=${params.id}`;
 
-  // Notify all parties
+  // Email everyone (no-op if key missing)
   if (notifyAll) {
     const recipients = parties.rows.map((p: any) => p.email);
-    await resend.emails.send({
-      from: "noreply@your-domain",
-      to: recipients,
-      subject: "Final signed PDF",
-      html: `<p>Download your document: <a href="${blob.url}">${blob.url}</a></p>`,
-    });
+    await sendFinalPdf(recipients, blob.url);
   }
 
   return NextResponse.json({ ok: true, finalUrl: blob.url, sha256 });
