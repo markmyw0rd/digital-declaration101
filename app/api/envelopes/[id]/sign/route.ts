@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "@/lib/db";
-import { verifyToken, signToken } from "@/lib/jwt";
+import { sql } from "../../../../../lib/db";         // ✅ relative
+import { verifyToken, signToken } from "../../../../../lib/jwt"; // ✅ relative
 import { put } from "@vercel/blob";
-import { sendMagicLink } from "@/lib/email";
+import { sendMagicLink } from "../../../../../lib/email"; // ✅ relative
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }){
   const { token, signatureDataUrl, formPatch, nextEmail } = await req.json();
