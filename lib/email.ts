@@ -1,41 +1,42 @@
 import { Resend } from "resend";
 
-/** Lazily create a Resend client; return null if key is missing. */
-function getResend() {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) {
-    // Build-safe: don't throw—just no-op and log.
-    console.warn("[email] RESEND_API_KEY missing; emails will be skipped.");
-    return null;
+const resend = new Resend(process.env.RESEND_API_KEY || "");
+
+export async function sendNextLinkEmail(
+  to: string,
+  role: "supervisor" | "assessor",
+  nextUrl: string,
+  unitCode = "AURTTE104"
+) {
+  if (!to) return;
+  if (!process.env.RESEND_API_KEY) {
+    console.log("⚠️ No RESEND_API_KEY — skipping email");
+    return;
   }
+
+  const subject =
+    role === "supervisor"
+      ? `${unitCode} Declaration – Supervisor Step`
+      : `${unitCode} Declaration – Assessor Step`;
+
+  const html = `
+    <h3>${unitCode} Digital Declaration</h3>
+    <p>Please complete the <b>${role}</b> section.</p>
+    <p><a href="${nextUrl}">Click here to open</a></p>
+    <p>If that doesn't work, copy and paste this link:</p>
+    <p>${nextUrl}</p>
+    <p>Thank you,<br>Allora College</p>
+  `;
+
   try {
-    return new Resend(key);
-  } catch {
-    console.warn("[email] Failed to init Resend; emails will be skipped.");
-    return null;
+    await resend.emails.send({
+      from: "Allora College <no-reply@yourdomain.com>",
+      to,
+      subject,
+      html,
+    });
+    console.log(`✅ Email sent to ${to}`);
+  } catch (err) {
+    console.error("❌ Failed to send email", err);
   }
-}
-
-export async function sendMagicLink(to: string, url: string, role: string) {
-  const resend = getResend();
-  if (!resend) return; // no-op if no key
-
-  await resend.emails.send({
-    from: "noreply@your-domain",
-    to,
-    subject: `Your ${role} link`,
-    html: `<p>Click to continue: <a href="${url}">${url}</a></p>`,
-  });
-}
-
-export async function sendFinalPdf(recipients: string[], url: string) {
-  const resend = getResend();
-  if (!resend) return; // no-op if no key
-
-  await resend.emails.send({
-    from: "noreply@your-domain",
-    to: recipients,
-    subject: "Final signed PDF",
-    html: `<p>Download your document: <a href="${url}">${url}</a></p>`,
-  });
 }
