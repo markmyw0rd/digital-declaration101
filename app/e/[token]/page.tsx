@@ -18,12 +18,10 @@ export default function Envelope({ params }: { params: { token: string } }) {
 
   useEffect(() => {
     (async () => {
-      // who am I?
       const r = await fetch("/api/whoami", { method: "POST", body: token });
       const j = await r.json();
       setRole(j.role);
 
-      // envelope view for my role
       const g = await fetch(`/api/envelopes/${j.envId}`, {
         headers: { authorization: `Bearer ${token}` },
       });
@@ -49,8 +47,8 @@ export default function Envelope({ params }: { params: { token: string } }) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ token, signatureDataUrl, formPatch: { agreed: true }, nextEmail }),
     });
-    const j = await res.json();
-    if (j.next) window.location.href = j.next; // send next role to their link
+    const j = await res.json().catch(() => ({}));
+    if (j?.next) window.location.href = j.next;
   }
 
   async function complete(outcome: "C" | "NYC") {
@@ -59,28 +57,35 @@ export default function Envelope({ params }: { params: { token: string } }) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ token, outcome }),
     });
-    const j = await res.json();
-    if (j.finalUrl) window.location.href = j.finalUrl;
+    const j = await res.json().catch(() => ({}));
+    if (j?.finalUrl) window.location.href = j.finalUrl;
   }
 
   return (
-    <main className="max-w-5xl mx-auto p-6 space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-xl font-semibold">Student Declaration</h1>
-        <p className="text-sm text-slate-600">
-          Unit: {env.envelope.unit_code} • Status: {status} • You are: <b>{role}</b>
-        </p>
-      </header>
+    <div className="space-y-6">
+      <div className="rounded-2xl border bg-white shadow-sm p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">AURTTE104 — Student Declaration</h2>
+            <p className="text-sm text-slate-600">
+              Unit: {env.envelope.unit_code} • Status: {status} • You are: <b>{role}</b>
+            </p>
+          </div>
+          <div className="text-xs text-slate-500">
+            Student → Supervisor → Assessor
+          </div>
+        </div>
+      </div>
 
-      {/* Student first */}
+      {/* Student first (active card on top) */}
       <Section title="Student — Sign here" locked={!canStudent}>
         <StudentCard locked={!canStudent} onSign={signCurrent} />
         <p className="text-xs text-slate-500 mt-2">
-          After signing, your supervisor will receive a link to complete their declaration.
+          After you sign, your supervisor will automatically receive a link.
         </p>
       </Section>
 
-      {/* Supervisor next (read-only until it's their turn) */}
+      {/* Supervisor (locked until student finishes) */}
       <Section title="Supervisor" locked={!canSupervisor}>
         <SupervisorCard locked={!canSupervisor} onSign={signCurrent} />
       </Section>
@@ -89,10 +94,6 @@ export default function Envelope({ params }: { params: { token: string } }) {
       <AssessorDeclaration locked={!canAssessor} />
       <Checklist locked={!canAssessor} />
       <Outcome locked={!canAssessor} onComplete={complete} />
-
-      <footer className="text-xs text-slate-500 pt-4">
-        © Allora College — Workplace Training and Assessment | AURTTE104 Declaration
-      </footer>
-    </main>
+    </div>
   );
 }

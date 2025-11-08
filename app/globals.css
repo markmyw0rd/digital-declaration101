@@ -1,7 +1,8 @@
+/* app/globals.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@media print {
+@layer utilities {
   .avoid-break { break-inside: avoid; }
 }
