@@ -11,40 +11,63 @@ export default function SignaturePad({
   const padRef = useRef<SignaturePadLib | null>(null);
 
   useEffect(() => {
-    if (!canvasRef.current) return;
-    // Initialize signature pad
-    padRef.current = new SignaturePadLib(canvasRef.current, {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // init
+    padRef.current = new SignaturePadLib(canvas, {
       minWidth: 0.7,
       maxWidth: 2.5,
       penColor: "black",
     });
 
-    // Capture when user finishes drawing
-    padRef.current.onEnd = () => {
-      const dataUrl = padRef.current?.toDataURL("image/png") || "";
-      onChange(dataUrl);
+    const emit = () => {
+      // only emit if there is something drawn
+      if (padRef.current && !padRef.current.isEmpty()) {
+        onChange(padRef.current.toDataURL("image/png"));
+      } else {
+        onChange("");
+      }
     };
-  }, [onChange]);
 
-  // Handle resizing
-  useEffect(() => {
-    const resize = () => {
-      const canvas = canvasRef.current;
+    // use native events instead of pad.onEnd (types don’t expose it)
+    const endEvents = ["mouseup", "touchend", "pointerup"] as const;
+    endEvents.forEach((evt) => canvas.addEventListener(evt, emit));
+
+    // handle resize: keep strokes
+    const handleResize = () => {
       if (!canvas || !padRef.current) return;
       const data = padRef.current.toData();
-      canvas.width = canvas.offsetWidth;
-      canvas.height = 160;
+      // resize canvas to container width, fixed height 160
+      const width = canvas.getBoundingClientRect().width || 800;
+      const ratio = Math.max(window.devicePixelRatio || 1, 1);
+      canvas.width = Math.round(width * ratio);
+      canvas.height = Math.round(160 * ratio);
+      canvas.style.width = "100%";
+      canvas.style.height = "160px";
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.scale(ratio, ratio);
+
       padRef.current.clear();
-      padRef.current.fromData(data);
+      if (data && data.length) padRef.current.fromData(data);
     };
-    window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
-  }, []);
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      endEvents.forEach((evt) => canvas.removeEventListener(evt, emit));
+      window.removeEventListener("resize", handleResize);
+      padRef.current?.off(); // safe no-op if not present
+      padRef.current = null;
+    };
+  }, [onChange]);
 
   return (
     <div className="border rounded-xl overflow-hidden bg-white">
       <canvas
         ref={canvasRef}
+        // width/height will be set by effect for HiDPI; these are fallback
         width={800}
         height={160}
         className="block w-full h-[160px] bg-white"
