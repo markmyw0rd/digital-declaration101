@@ -11,23 +11,58 @@ import {
   Section,
 } from "../../../components/FormCards";
 
+async function fetchJsonSafe(input: RequestInfo, init?: RequestInit) {
+  const res = await fetch(input, init);
+  const text = await res.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = { error: text || `HTTP ${res.status}` };
+  }
+  if (!res.ok) {
+    const msg = data?.error || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
 export default function Envelope({ params }: { params: { token: string } }) {
   const token = params.token;
   const [env, setEnv] = useState<any>(null);
   const [role, setRole] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
-      const r = await fetch("/api/whoami", { method: "POST", body: token });
-      const j = await r.json();
-      setRole(j.role);
+      try {
+        // who am I?
+        const who = await fetchJsonSafe("/api/whoami", {
+          method: "POST",
+          body: token,
+        });
+        setRole(who.role);
 
-      const g = await fetch(`/api/envelopes/${j.envId}`, {
-        headers: { authorization: `Bearer ${token}` },
-      });
-      setEnv(await g.json());
+        // envelope view
+        const view = await fetchJsonSafe(`/api/envelopes/${who.envId}`, {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        setEnv(view);
+      } catch (e: any) {
+        setError(e?.message || "Failed to load envelope");
+      }
     })();
   }, [token]);
+
+  if (error) {
+    return (
+      <main className="p-6">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
+          {error}
+        </div>
+      </main>
+    );
+  }
 
   if (!env) return <main className="p-6">Loading…</main>;
 
@@ -42,27 +77,33 @@ export default function Envelope({ params }: { params: { token: string } }) {
   const canAssessor = status === "awaiting_assessor" && role === "assessor";
 
   async function signCurrent(signatureDataUrl: string, nextEmail: string) {
-    const res = await fetch(`/api/envelopes/${env.envelope.id}/sign`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ token, signatureDataUrl, formPatch: { agreed: true }, nextEmail }),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (j?.next) window.location.href = j.next;
+    try {
+      const j = await fetchJsonSafe(`/api/envelopes/${env.envelope.id}/sign`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token, signatureDataUrl, formPatch: { agreed: true }, nextEmail }),
+      });
+      if (j.next) window.location.href = j.next;
+    } catch (e: any) {
+      alert(e?.message || "Failed to sign");
+    }
   }
 
   async function complete(outcome: "C" | "NYC") {
-    const res = await fetch(`/api/envelopes/${env.envelope.id}/complete`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ token, outcome }),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (j?.finalUrl) window.location.href = j.finalUrl;
+    try {
+      const j = await fetchJsonSafe(`/api/envelopes/${env.envelope.id}/complete`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token, outcome }),
+      });
+      if (j.finalUrl) window.location.href = j.finalUrl;
+    } catch (e: any) {
+      alert(e?.message || "Failed to complete");
+    }
   }
 
   return (
-    <div className="space-y-6">
+    <main className="max-w-5xl mx-auto p-6 space-y-6">
       <div className="rounded-2xl border bg-white shadow-sm p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -71,13 +112,10 @@ export default function Envelope({ params }: { params: { token: string } }) {
               Unit: {env.envelope.unit_code} • Status: {status} • You are: <b>{role}</b>
             </p>
           </div>
-          <div className="text-xs text-slate-500">
-            Student → Supervisor → Assessor
-          </div>
+          <div className="text-xs text-slate-500">Student → Supervisor → Assessor</div>
         </div>
       </div>
 
-      {/* Student first (active card on top) */}
       <Section title="Student — Sign here" locked={!canStudent}>
         <StudentCard locked={!canStudent} onSign={signCurrent} />
         <p className="text-xs text-slate-500 mt-2">
@@ -85,15 +123,13 @@ export default function Envelope({ params }: { params: { token: string } }) {
         </p>
       </Section>
 
-      {/* Supervisor (locked until student finishes) */}
       <Section title="Supervisor" locked={!canSupervisor}>
         <SupervisorCard locked={!canSupervisor} onSign={signCurrent} />
       </Section>
 
-      {/* Assessor last */}
       <AssessorDeclaration locked={!canAssessor} />
       <Checklist locked={!canAssessor} />
       <Outcome locked={!canAssessor} onComplete={complete} />
-    </div>
+    </main>
   );
 }
