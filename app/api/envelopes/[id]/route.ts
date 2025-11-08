@@ -1,37 +1,90 @@
-// app/api/whoami/route.ts
+// app/api/envelopes/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic"; // avoid any static optimization
+
+// Detect Postgres presence (so we can serve mock data when not configured)
+const DB_READY = Boolean(
+  process.env.POSTGRES_URL ||
+  process.env.POSTGRES_URL_NON_POOLING ||
+  process.env.POSTGRES_PRISMA_URL ||
+  process.env.POSTGRES_HOST
+);
+
+// Lazy-load @vercel/postgres only if env exists
+let sql: any = null;
+if (DB_READY) {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  sql = require("@vercel/postgres").sql;
+}
+
+// ---- Helpers ----
+function jsonError(e: unknown, status = 500) {
+  const msg = e instanceof Error ? e.message : String(e);
+  return NextResponse.json({ error: msg }, { status });
+}
+
 /**
- * Body contains a token string created earlier.
- * In mock/dev we simply base64url-decode it:
- *   eyJ...  -> { envId: string, role: "student"|"supervisor"|"assessor" }
- * Always returns JSON, never throws HTML.
+ * GET /api/envelopes/:id
+ * Returns a view model for the envelope.
  */
-export async function POST(req: NextRequest) {
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
-    const token = await req.text(); // raw body is the token string
-    if (!token || token.length > 4096) {
-      return NextResponse.json({ error: "Missing or invalid token" }, { status: 400 });
+    const id = params.id;
+
+    // MOCK MODE: no DB configured → return minimal data so UI works
+    if (!DB_READY) {
+      return NextResponse.json({
+        envelope: { id, unit_code: "AURTTE104", status: "awaiting_student" },
+        parties: [],
+        mode: "mock",
+      });
     }
 
-    // base64url decode (works for our mock tokens)
-    let payload: any = null;
-    try {
-      const normalized = token.replace(/-/g, "+").replace(/_/g, "/");
-      const str = Buffer.from(normalized, "base64").toString("utf8");
-      payload = JSON.parse(str);
-    } catch {
-      // If it’s not JSON, still return something readable for debugging
-      return NextResponse.json({ error: "Bad token format" }, { status: 400 });
+    // DB MODE
+    const env = await sql`
+      SELECT e.id, e.status, u.code AS unit_code
+      FROM envelopes e
+      JOIN units u ON u.id = e.unit_id
+      WHERE e.id = ${id}
+      LIMIT 1
+    `;
+    if (!env?.rows?.length) {
+      return NextResponse.json({ error: "Envelope not found" }, { status: 404 });
     }
 
-    const { envId, role } = payload || {};
-    if (!envId || !role) {
-      return NextResponse.json({ error: "Token missing envId/role" }, { status: 400 });
-    }
+    const parties = await sql`
+      SELECT role, email, signed_at, signature_blob_url
+      FROM envelope_parties
+      WHERE envelope_id = ${id}
+      ORDER BY role
+    `;
 
-    return NextResponse.json({ envId, role });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
+    return NextResponse.json({
+      envelope: env.rows[0],
+      parties: parties.rows || [],
+      mode: "db",
+    });
+  } catch (e) {
+    return jsonError(e, 500);
   }
+}
+
+/**
+ * Some platforms send HEAD/OPTIONS automatically.
+ * Export handlers so we never return 405 for those.
+ */
+export async function HEAD() {
+  return NextResponse.json({ ok: true });
+}
+
+export async function OPTIONS() {
+  const res = NextResponse.json({ ok: true });
+  // (optional) CORS headers if you ever call this cross-origin
+  res.headers.set("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS");
+  res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  return res;
 }
