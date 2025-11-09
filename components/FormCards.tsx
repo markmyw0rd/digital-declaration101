@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 /* Types                                                               */
 /* ------------------------------------------------------------------ */
 export type Role = "student" | "supervisor" | "assessor";
+export type OutcomeValue = "competent" | "nyc";
 
 type BaseCardProps = {
   title?: string;
@@ -32,7 +33,7 @@ function CardShell({ title, className = "", children }: BaseCardProps) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Named Cards (exports expected by /app/e/[token]/page.tsx)           */
+/* Named Cards (expected imports in /app/e/[token]/page.tsx)           */
 /* ------------------------------------------------------------------ */
 export function StudentCard(props: BaseCardProps) {
   return <CardShell title={props.title ?? "Student — Sign here"} {...props} />;
@@ -59,6 +60,74 @@ export function AssessorDeclaration(props: BaseCardProps) {
 export function Checklist(props: BaseCardProps) {
   return (
     <CardShell title={props.title ?? "Quick Assessor Checklist"} {...props} />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Section (simple titled wrapper)                                     */
+/* ------------------------------------------------------------------ */
+export function Section({
+  title,
+  className = "",
+  children,
+}: BaseCardProps) {
+  return (
+    <div className={`mb-5 ${className}`}>
+      {title ? (
+        <h4 className="mb-2 text-base font-medium text-zinc-800">{title}</h4>
+      ) : null}
+      <div className="rounded-lg border border-zinc-200 bg-white p-4">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Outcome selector (Competent / NYC)                                  */
+/* ------------------------------------------------------------------ */
+export function Outcome({
+  value,
+  onChange,
+  disabled = false,
+  className = "",
+}: {
+  value: OutcomeValue | null;
+  onChange: (v: OutcomeValue) => void;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <div className={`flex gap-3 ${className}`}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onChange("competent")}
+        className={`flex-1 rounded-md border px-4 py-2 text-sm font-medium transition
+          ${
+            value === "competent"
+              ? "border-green-600 bg-green-600 text-white"
+              : "border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50"
+          }
+          ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}
+      >
+        Mark Competent
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onChange("nyc")}
+        className={`flex-1 rounded-md border px-4 py-2 text-sm font-medium transition
+          ${
+            value === "nyc"
+              ? "border-amber-600 bg-amber-600 text-white"
+              : "border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50"
+          }
+          ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}
+      >
+        Not Yet Competent
+      </button>
+    </div>
   );
 }
 
