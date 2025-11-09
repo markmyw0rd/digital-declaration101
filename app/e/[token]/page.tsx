@@ -1,121 +1,128 @@
-// app/e/[token]/page.tsx
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from 'react';
 import {
+  Section,
   StudentCard,
   SupervisorCard,
   AssessorDeclaration,
   Checklist,
   Outcome,
-  Section,
-} from "../../../components/FormCards";
+} from '../../../components/FormCards';
 
-async function fetchJsonSafe(input: RequestInfo, init?: RequestInit) {
-  const res = await fetch(input, init);
-  const text = await res.text();
-  let data: any;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    data = { error: text || `HTTP ${res.status}` };
-  }
-  if (!res.ok) {
-    const msg = data?.error || `HTTP ${res.status}`;
-    throw new Error(msg);
-  }
-  return data;
-}
+type PageParams = { params: { token: string } };
 
-export default function Envelope({ params }: { params: { token: string } }) {
-  const token = params.token;
-  const [env, setEnv] = useState<any>(null);
-  const [role, setRole] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
+type Envelope = {
+  id: string;
+  unit_code: string;
+  status:
+    | 'awaiting_student'
+    | 'awaiting_supervisor'
+    | 'awaiting_assessor'
+    | 'completed';
+  studentSignature?: string | null;
+  supervisorSignature?: string | null;
+  assessorSignature?: string | null;
+};
 
+type Role = 'student' | 'supervisor' | 'assessor';
+
+export default function EnvelopePage({ params }: PageParams) {
+  const { token } = params;
+
+  const [env, setEnv] = useState<Envelope | null>(null);
+  const [role, setRole] = useState<Role>('student');
+  const [loading, setLoading] = useState(true);
+
+  /** ---------------- helpers ---------------- */
+  const status = env?.status ?? 'awaiting_student';
+
+  const canStudent = useMemo(
+    () => role === 'student' && status === 'awaiting_student',
+    [role, status],
+  );
+  const canSupervisor = useMemo(
+    () => role === 'supervisor' && status === 'awaiting_supervisor',
+    [role, status],
+  );
+  const canAssessor = useMemo(
+    () => role === 'assessor' && status === 'awaiting_assessor',
+    [role, status],
+  );
+
+  /** ---------------- data load ---------------- */
   useEffect(() => {
     (async () => {
-      try {
-        // who am I?
-        const who = await fetchJsonSafe("/api/whoami", {
-          method: "POST",
-          body: token,
-        });
-        setRole(who.role);
-
-        // envelope view
-        const view = await fetchJsonSafe(`/api/envelopes/${who.envId}`, {
-          headers: { authorization: `Bearer ${token}` },
-        });
-        setEnv(view);
-      } catch (e: any) {
-        setError(e?.message || "Failed to load envelope");
+      setLoading(true);
+      const res = await fetch(`/api/e/${token}`);
+      if (!res.ok) {
+        setLoading(false);
+        return;
       }
+      const data: {
+        envelope: Envelope;
+        role: Role;
+      } = await res.json();
+      setEnv(data.envelope);
+      setRole(data.role);
+      setLoading(false);
     })();
   }, [token]);
 
-  if (error) {
+  /** ---------------- actions ---------------- */
+  async function signCurrent(signatureDataUrl: string, nextEmail: string) {
+    if (!env) return;
+    const res = await fetch(`/api/envelopes/${env.id}/sign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        role,
+        dataUrl: signatureDataUrl,
+        nextEmail,
+      }),
+    });
+
+    if (res.ok) {
+      const updated: Envelope = await res.json();
+      setEnv(updated);
+    }
+  }
+
+  async function complete() {
+    if (!env) return;
+    const res = await fetch(`/api/envelopes/${env.id}/complete`, {
+      method: 'POST',
+    });
+    if (res.ok) {
+      const updated: Envelope = await res.json();
+      setEnv(updated);
+    }
+  }
+
+  /** ---------------- render ---------------- */
+  if (loading || !env) {
     return (
-      <main className="p-6">
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
-          {error}
-        </div>
+      <main className="max-w-5xl mx-auto p-6">
+        <div className="animate-pulse text-slate-400">Loading…</div>
       </main>
     );
-  }
-
-  if (!env) return <main className="p-6">Loading…</main>;
-
-  const status = env.envelope?.status as
-    | "awaiting_student"
-    | "awaiting_supervisor"
-    | "awaiting_assessor"
-    | "completed";
-
-  const canStudent = status === "awaiting_student" && role === "student";
-  const canSupervisor = status === "awaiting_supervisor" && role === "supervisor";
-  const canAssessor = status === "awaiting_assessor" && role === "assessor";
-
-  async function signCurrent(signatureDataUrl: string, nextEmail: string) {
-    try {
-      const j = await fetchJsonSafe(`/api/envelopes/${env.envelope.id}/sign`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token, signatureDataUrl, formPatch: { agreed: true }, nextEmail }),
-      });
-      if (j.next) window.location.href = j.next;
-    } catch (e: any) {
-      alert(e?.message || "Failed to sign");
-    }
-  }
-
-  async function complete(outcome: "C" | "NYC") {
-    try {
-      const j = await fetchJsonSafe(`/api/envelopes/${env.envelope.id}/complete`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token, outcome }),
-      });
-      if (j.finalUrl) window.location.href = j.finalUrl;
-    } catch (e: any) {
-      alert(e?.message || "Failed to complete");
-    }
   }
 
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-6">
       <div className="rounded-2xl border bg-white shadow-sm p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">AURTTE104 — Student Declaration</h2>
-            <p className="text-sm text-slate-600">
-              Unit: {env.envelope.unit_code} • Status: {status} • You are: <b>{role}</b>
-            </p>
+          <div className="text-lg font-semibold">AURTTE104 — Student Declaration</div>
+          <div className="text-sm text-slate-600">
+            Unit: <b>{env.unit_code}</b> • Status: <b>{status}</b> • You are: <b>{role}</b>
           </div>
-          <div className="text-xs text-slate-500">Student → Supervisor → Assessor</div>
+        </div>
+        <div className="text-xs text-slate-500">
+          Student → Supervisor → Assessor
         </div>
       </div>
 
+      {/* Student */}
       <Section title="Student — Sign here" locked={!canStudent}>
         <StudentCard locked={!canStudent} onSigned={signCurrent} />
         <p className="text-xs text-slate-500 mt-2">
@@ -123,10 +130,12 @@ export default function Envelope({ params }: { params: { token: string } }) {
         </p>
       </Section>
 
+      {/* Supervisor */}
       <Section title="Supervisor" locked={!canSupervisor}>
-        <SupervisorCard locked={!canSupervisor} onSign={signCurrent} />
+        <SupervisorCard locked={!canSupervisor} onSigned={signCurrent} />
       </Section>
 
+      {/* Assessor */}
       <AssessorDeclaration locked={!canAssessor} />
       <Checklist locked={!canAssessor} />
       <Outcome locked={!canAssessor} onComplete={complete} />
