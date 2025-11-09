@@ -1,7 +1,7 @@
 // app/api/envelopes/[id]/sign/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { db } from "@/lib/db"; // ✅ named import
+import { db } from "@/lib/db"; // ✅ fixed named import
 import { sendNextLinkEmail } from "@/lib/email";
 
 type Role = "student" | "supervisor" | "assessor";
@@ -20,7 +20,7 @@ export async function POST(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    // Persist signature + move status forward
+    // --- Persist signature + move status forward ---
     let nextRole: "supervisor" | "assessor" | null = null;
 
     if (role === "student") {
@@ -36,7 +36,6 @@ export async function POST(
       });
       nextRole = "assessor";
     } else {
-      // assessor finalise
       await db.updateEnvelope(id, {
         assessorSignature: dataUrl || "",
         status: "completed",
@@ -44,7 +43,7 @@ export async function POST(
       nextRole = null;
     }
 
-    // Email the next person when applicable
+    // --- Email the next person (if any) ---
     if (nextRole && process.env.RESEND_API_KEY) {
       const to =
         nextRole === "supervisor" ? env.supervisorEmail : env.assessorEmail;
