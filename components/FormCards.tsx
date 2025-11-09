@@ -1,210 +1,171 @@
 // components/FormCards.tsx
 "use client";
 
-import React, { useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import React from "react";
 
-/* ------------------------------------------------------------------ */
-/* Types                                                               */
-/* ------------------------------------------------------------------ */
-export type Role = "student" | "supervisor" | "assessor";
-export type OutcomeValue = "competent" | "nyc";
-
-type BaseCardProps = {
-  title?: string;
-  className?: string;
-  children?: React.ReactNode;
-};
-
-/* ------------------------------------------------------------------ */
-/* Reusable Card Shell                                                 */
-/* ------------------------------------------------------------------ */
-function CardShell({ title, className = "", children }: BaseCardProps) {
+/** ---------- Small shared primitives ---------- */
+export function Section({
+  title,
+  locked = false,
+  children,
+}: {
+  title: string;
+  /** When true, visually dim and make the section inert */
+  locked?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <section
-      className={`rounded-xl border border-zinc-200 bg-white p-4 md:p-6 shadow-sm ${className}`}
+      aria-disabled={locked}
+      className={[
+        "relative rounded-xl border border-gray-200 bg-white p-4 md:p-6 shadow-sm",
+        locked ? "opacity-60 pointer-events-none" : "",
+      ].join(" ")}
     >
-      {title ? (
-        <h3 className="mb-3 text-lg font-semibold text-zinc-900">{title}</h3>
-      ) : null}
-      {children}
+      <h3 className="mb-3 text-base md:text-lg font-semibold text-gray-800">
+        {title}
+      </h3>
+      <div className="space-y-3">{children}</div>
+      {locked && (
+        <div className="absolute inset-0 rounded-xl" aria-hidden="true" />
+      )}
     </section>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Named Cards (expected imports in /app/e/[token]/page.tsx)           */
-/* ------------------------------------------------------------------ */
-export function StudentCard(props: BaseCardProps) {
-  return <CardShell title={props.title ?? "Student — Sign here"} {...props} />;
-}
-
-export function SupervisorCard(props: BaseCardProps) {
+export function Checklist({
+  items,
+  value = [],
+  onChange,
+}: {
+  items: { id: string; label: string }[];
+  value?: string[];
+  onChange?: (next: string[]) => void;
+}) {
+  const selected = new Set(value);
   return (
-    <CardShell
-      title={props.title ?? "Supervisor — Review & Sign"}
-      {...props}
-    />
+    <div className="grid gap-2">
+      {items.map((it) => {
+        const checked = selected.has(it.id);
+        return (
+          <label
+            key={it.id}
+            className="flex items-center gap-3 rounded-lg border p-3"
+          >
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={checked}
+              onChange={(e) => {
+                const next = new Set(selected);
+                if (e.target.checked) next.add(it.id);
+                else next.delete(it.id);
+                onChange?.(Array.from(next));
+              }}
+            />
+            <span className="text-sm md:text-base">{it.label}</span>
+          </label>
+        );
+      })}
+    </div>
   );
 }
 
-export function AssessorDeclaration(props: BaseCardProps) {
+export function Outcome({
+  value = "NYC",
+  onChange,
+}: {
+  value?: "Competent" | "NYC";
+  onChange?: (v: "Competent" | "NYC") => void;
+}) {
   return (
-    <CardShell
-      title={props.title ?? "Assessor — Declaration"}
-      {...props}
-    />
+    <div className="flex gap-4">
+      {(["Competent", "NYC"] as const).map((opt) => (
+        <label
+          key={opt}
+          className="flex items-center gap-2 rounded-lg border px-3 py-2"
+        >
+          <input
+            type="radio"
+            name="outcome"
+            value={opt}
+            checked={value === opt}
+            onChange={() => onChange?.(opt)}
+          />
+          <span className="text-sm md:text-base">{opt}</span>
+        </label>
+      ))}
+    </div>
   );
 }
 
-export function Checklist(props: BaseCardProps) {
-  return (
-    <CardShell title={props.title ?? "Quick Assessor Checklist"} {...props} />
-  );
-}
+/** ---------- Role cards ---------- */
 
-/* ------------------------------------------------------------------ */
-/* Section (simple titled wrapper)                                     */
-/* ------------------------------------------------------------------ */
-export function Section({
-  title,
-  className = "",
+type BaseCardProps = {
+  /** Accept both names; locked wins if both present */
+  locked?: boolean;
+  disabled?: boolean;
+  onSigned?: () => void;
+  children?: React.ReactNode;
+};
+
+export function StudentCard({
+  locked,
+  disabled,
+  onSigned,
   children,
 }: BaseCardProps) {
+  const isDisabled = locked ?? disabled ?? false;
   return (
-    <div className={`mb-5 ${className}`}>
-      {title ? (
-        <h4 className="mb-2 text-base font-medium text-zinc-800">{title}</h4>
-      ) : null}
-      <div className="rounded-lg border border-zinc-200 bg-white p-4">
-        {children}
-      </div>
-    </div>
+    <Section title="Student — Sign here" locked={isDisabled}>
+      <div className="h-40 rounded-lg border bg-gray-50" />
+      <button
+        disabled={isDisabled}
+        onClick={onSigned}
+        className="mt-3 w-full rounded-lg bg-black px-4 py-3 text-white disabled:opacity-40"
+      >
+        Sign & Notify Supervisor
+      </button>
+      {children}
+    </Section>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Outcome selector (Competent / NYC)                                  */
-/* ------------------------------------------------------------------ */
-export function Outcome({
-  value,
-  onChange,
-  disabled = false,
-  className = "",
-}: {
-  value: OutcomeValue | null;
-  onChange: (v: OutcomeValue) => void;
-  disabled?: boolean;
-  className?: string;
-}) {
+export function SupervisorCard({
+  locked,
+  disabled,
+  onSigned,
+  children,
+}: BaseCardProps) {
+  const isDisabled = locked ?? disabled ?? false;
   return (
-    <div className={`flex gap-3 ${className}`}>
+    <Section title="Workplace Supervisor — Sign here" locked={isDisabled}>
+      <div className="h-40 rounded-lg border bg-gray-50" />
       <button
-        type="button"
-        disabled={disabled}
-        onClick={() => onChange("competent")}
-        className={`flex-1 rounded-md border px-4 py-2 text-sm font-medium transition
-          ${
-            value === "competent"
-              ? "border-green-600 bg-green-600 text-white"
-              : "border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50"
-          }
-          ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}
+        disabled={isDisabled}
+        onClick={onSigned}
+        className="mt-3 w-full rounded-lg bg-black px-4 py-3 text-white disabled:opacity-40"
       >
-        Mark Competent
+        Sign & Notify Assessor
       </button>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => onChange("nyc")}
-        className={`flex-1 rounded-md border px-4 py-2 text-sm font-medium transition
-          ${
-            value === "nyc"
-              ? "border-amber-600 bg-amber-600 text-white"
-              : "border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50"
-          }
-          ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}
-      >
-        Not Yet Competent
-      </button>
-    </div>
+      {children}
+    </Section>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Reusable Sign Button                                                */
-/* ------------------------------------------------------------------ */
-export function SignButton({
-  envelopeId,
-  role,
-  dataUrl,
-  disabledReason,
-  className = "",
+export function AssessorDeclaration({
   children,
 }: {
-  envelopeId: string;
-  role: Role;
-  /** signature dataURL (required for student/supervisor) */
-  dataUrl?: string;
-  disabledReason?: string;
-  className?: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }) {
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-
-  const onClick = useCallback(async () => {
-    if (busy) return;
-
-    // student/supervisor must have a signature image
-    if ((role === "student" || role === "supervisor") && !dataUrl) return;
-
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/envelopes/${envelopeId}/sign`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ role, dataUrl }),
-      });
-
-      // avoid JSON parse crash on empty body
-      const json: any = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        const msg = json?.error || `HTTP ${res.status}`;
-        alert(msg);
-        return;
-      }
-
-      if (json?.nextUrl) {
-        router.replace(json.nextUrl);
-      } else {
-        router.refresh();
-      }
-    } catch (err: any) {
-      alert(err?.message || "Failed to submit signature");
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, envelopeId, role, dataUrl, router]);
-
-  const isDisabled =
-    busy ||
-    (!!disabledReason && disabledReason.length > 0) ||
-    ((role === "student" || role === "supervisor") && !dataUrl);
-
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={isDisabled}
-      aria-busy={busy}
-      title={disabledReason}
-      className={`w-full rounded-md bg-black px-4 py-3 text-white transition-opacity ${
-        isDisabled ? "opacity-60 cursor-not-allowed" : "hover:opacity-90"
-      } ${className}`}
-    >
-      {busy ? "Processing…" : children}
-    </button>
+    <Section title="Assessor — Declaration">
+      {children ?? (
+        <p className="text-sm text-gray-600">
+          Confirm pre-assessment checks, knowledge assessment, and practical
+          observation have been completed.
+        </p>
+      )}
+    </Section>
   );
 }
