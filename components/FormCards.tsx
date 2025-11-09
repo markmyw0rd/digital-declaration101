@@ -1,4 +1,4 @@
-// components/FormCards.tsx
+// components/FormCards.tsx  (append this; keep your existing exports as-is)
 "use client";
 
 import { useState, useCallback } from "react";
@@ -6,11 +6,17 @@ import { useRouter } from "next/navigation";
 
 type Role = "student" | "supervisor" | "assessor";
 
+/**
+ * Reusable sign button that:
+ *  - POSTs to /api/envelopes/[id]/sign with { role, dataUrl }
+ *  - navigates to the nextUrl returned by the API (or refreshes)
+ *  - prevents double submit and handles empty JSON bodies
+ */
 export function SignButton({
   envelopeId,
-  role,                 // "student" | "supervisor" | "assessor"
-  dataUrl,              // signature image data URL (string) or undefined
-  disabledReason,       // optional string to show why disabled
+  role,
+  dataUrl,
+  disabledReason,
   className = "",
   children,
 }: {
@@ -26,7 +32,8 @@ export function SignButton({
 
   const onClick = useCallback(async () => {
     if (busy) return;
-    // Basic guard: require a signature for roles that sign
+
+    // Require a signature image for student/supervisor roles
     if ((role === "student" || role === "supervisor") && !dataUrl) return;
 
     setBusy(true);
@@ -37,10 +44,7 @@ export function SignButton({
         body: JSON.stringify({ role, dataUrl }),
       });
 
-      // try to parse json; if empty body, keep {} to avoid "Unexpected end of JSON"
-      const json: any = await res
-        .json()
-        .catch(() => ({} as { nextUrl?: string; error?: string }));
+      const json: any = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         const msg = json?.error || `HTTP ${res.status}`;
@@ -48,11 +52,9 @@ export function SignButton({
         return;
       }
 
-      // The API returns { nextUrl }
       if (json?.nextUrl) {
-        router.replace(json.nextUrl); // go to Supervisor or Assessor link
+        router.replace(json.nextUrl);
       } else {
-        // fallback – refresh current page (server will render next role by status)
         router.refresh();
       }
     } catch (err: any) {
@@ -69,12 +71,14 @@ export function SignButton({
 
   return (
     <button
-      type="button"                 // important: NOT a form submit
+      type="button" // important: not a form submit
       onClick={onClick}
       disabled={isDisabled}
       aria-busy={busy}
       title={disabledReason}
-      className={`w-full rounded-md px-4 py-3 text-white ${isDisabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"} ${className}`}
+      className={`w-full rounded-md px-4 py-3 text-white ${
+        isDisabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+      } ${className}`}
     >
       {busy ? "Processing…" : children}
     </button>
