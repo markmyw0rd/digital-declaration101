@@ -2,10 +2,11 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  const env = {
-    HAS_RESEND_API_KEY: !!process.env.RESEND_API_KEY,
-    EMAIL_FROM: process.env.EMAIL_FROM ?? null,
-    APP_URL: process.env.APP_URL ?? null,
-  };
-  return NextResponse.json({ ok: true, env });
+  return NextResponse.json({
+    ok: true,
+    appUrl: process.env.APP_URL ? "present" : "missing",
+    resendApiKey: process.env.RESEND_API_KEY ? "present" : "missing",
+    resendFrom: process.env.RESEND_FROM || "onboarding@resend.dev",
+    now: new Date().toISOString(),
+  });
 }

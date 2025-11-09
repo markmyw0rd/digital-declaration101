@@ -1,68 +1,79 @@
-import { NextRequest, NextResponse } from "next/server";
+// app/api/envelopes/[id]/sign/route.ts
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { db } from "@/lib/db";
 import { sendNextLinkEmail } from "@/lib/email";
 
-export const dynamic = "force-dynamic";
+/**
+ * POST /api/envelopes/[id]/sign
+ * Body: { role: "student" | "supervisor" | "assessor", dataUrl?: string, supervisorEmail?: string, assessorEmail?: string }
+ *
+ * Saves the current role’s signature, advances status, and emails the next role.
+ */
+export async function POST(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  const id = params.id;
+  const body = await req.json().catch(() => ({} as any));
 
-function decodeToken(t: string) {
-  const norm = t.replace(/-/g, "+").replace(/_/g, "/");
-  return JSON.parse(Buffer.from(norm, "base64").toString("utf8"));
-}
+  const role = body.role as "student" | "supervisor" | "assessor";
+  const dataUrl = body.dataUrl as string | undefined;
+  const supervisorEmail = body.supervisorEmail as string | undefined;
+  const assessorEmail = body.assessorEmail as string | undefined;
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  try {
-    const raw = await req.text();
-    const body = raw ? JSON.parse(raw) : {};
-    const { token, supervisorEmail, assessorEmail } = body;
-    if (!token) return NextResponse.json({ error: "Missing token" }, { status: 400 });
-
-    const { envId, role } = decodeToken(token);
-    const appUrl = process.env.APP_URL || req.nextUrl.origin;
-
-    // Simulate status transitions (mock mode)
-    let nextRole = "";
-    if (role === "student") nextRole = "supervisor";
-    else if (role === "supervisor") nextRole = "assessor";
-    else nextRole = "done";
-
-    // Generate next token + URL
-    const nextToken = Buffer.from(
-      JSON.stringify({ envId, role: nextRole })
-    )
-      .toString("base64")
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_");
-
-    const nextUrl =
-      nextRole === "done"
-        ? `${appUrl}/complete/${envId}`
-        : `${appUrl}/e/${nextToken}`;
-
-    // --- Email notifications ---
-    if (process.env.RESEND_API_KEY) {
-      if (role === "student" && supervisorEmail) {
-        await sendNextLinkEmail(supervisorEmail, "supervisor", nextUrl, "AURTTE104");
-      }
-      if (role === "supervisor" && assessorEmail) {
-        await sendNextLinkEmail(assessorEmail, "assessor", nextUrl, "AURTTE104");
-      }
-    } else {
-      console.log("⚠️ RESEND_API_KEY missing — skipping email send.");
-    }
-
-    // Mock response
-    return NextResponse.json({
-      ok: true,
-      nextUrl,
-      message:
-        nextRole === "done"
-          ? "All signatures completed."
-          : `Next step: ${nextRole}`,
-    });
-  } catch (e) {
-    console.error(e);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
-    );
+  if (!id || !role) {
+    return NextResponse.json({ error: "Missing id or role" }, { status: 400 });
   }
+
+  // Load the envelope (replace with your real persistence)
+  const env = await db.getEnvelope(id);
+  if (!env) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const unitCode = env.unitCode ?? "AURTTE104";
+
+  // Save the signature/data for this role
+  await db.saveSignature(id, role, dataUrl);
+
+  // Move state machine forward + build next URL
+  let nextUrl: string | null = null;
+
+  const base = (process.env.APP_URL || "").replace(/\/+$/, "");
+  if (!base) {
+    console.warn("[sign] APP_URL not set – emails will contain no link.");
+  }
+
+  if (role === "student") {
+    // advance → awaiting_supervisor
+    await db.updateStatus(id, "awaiting_supervisor");
+    if (base) nextUrl = `${base}/e/${id}?role=supervisor`;
+    // Email supervisor if possible
+    if (supervisorEmail) {
+      await sendNextLinkEmail({
+        to: supervisorEmail,
+        role: "supervisor",
+        nextUrl: nextUrl ?? "",
+        unitCode,
+      });
+    }
+  } else if (role === "supervisor") {
+    // advance → awaiting_assessor
+    await db.updateStatus(id, "awaiting_assessor");
+    if (base) nextUrl = `${base}/e/${id}?role=assessor`;
+    // Email assessor if provided
+    if (assessorEmail) {
+      await sendNextLinkEmail({
+        to: assessorEmail,
+        role: "assessor",
+        nextUrl: nextUrl ?? "",
+        unitCode,
+      });
+    }
+  } else if (role === "assessor") {
+    // finalise → completed
+    await db.updateStatus(id, "completed");
+    // Optionally: trigger PDF generation here
+  }
+
+  return NextResponse.json({ ok: true });
 }
