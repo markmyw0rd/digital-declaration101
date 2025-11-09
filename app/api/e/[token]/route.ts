@@ -1,46 +1,38 @@
 // app/api/e/[token]/route.ts
-
-import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { db } from "@/lib/db";             // Uses db.getEnvelope(id)
-import { verifyToken } from "@/lib/jwt";   // ✅ Correct function name
+import { NextResponse } from "next/server";
+import { verifyToken } from "@/lib/jwt";
+import { db } from "@/lib/db";
 
 type Params = { params: { token: string } };
 
-// GET /api/e/[token]
+/**
+ * GET /api/e/[token]
+ * - verifies the token
+ * - confirms the envelope exists
+ * - sets a short-lived, httpOnly cookie that /e/[token] page reads
+ * Returns 204 on success (no body).
+ */
 export async function GET(_req: Request, { params }: Params) {
   const { token } = params;
 
-  try {
-    // 1️⃣ Decode token to get envelope id + role
-    const payload = await verifyToken(token);
-    if (!payload?.id || !payload?.role) {
-      return NextResponse.json({ error: "invalid_token" }, { status: 400 });
-    }
-
-    // 2️⃣ Ensure the envelope exists
-    const env = await db.getEnvelope(payload.id);
-    if (!env) {
-      return NextResponse.json({ error: "not_found" }, { status: 404 });
-    }
-
-    // 3️⃣ Set a short, secure cookie so the /e/[token] page knows user+role
-    cookies().set(
-      "ev",
-      JSON.stringify({ id: payload.id, role: payload.role }),
-      {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: true,
-        path: "/",
-        maxAge: 60 * 60 * 24 * 7, // 7 days
-      }
-    );
-
-    // ✅ Everything good
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    console.error("[/api/e/[token]] error", err);
+  const payload = await verifyToken(token);
+  if (!payload) {
     return NextResponse.json({ error: "invalid_token" }, { status: 400 });
   }
+
+  const env = await db.getEnvelope(payload.id);
+  if (!env) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  cookies().set("ev", JSON.stringify(payload), {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7, // 7 days
+  });
+
+  return new NextResponse(null, { status: 204 });
 }
