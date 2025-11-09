@@ -1,9 +1,19 @@
+// lib/jwt.ts
 import jwt from "jsonwebtoken";
 
-const secret = process.env.JWT_SECRET!;
-export function signToken(payload: object, expiresIn = "7d") {
-  return (jwt as any).sign(payload, secret, { expiresIn });
+const SECRET = process.env.JWT_SECRET || "development-secret";
+
+export function signToken(payload: object) {
+  return jwt.sign(payload, SECRET, { expiresIn: "7d" });
 }
-export function verifyToken<T = any>(token: string) {
-  return (jwt as any).verify(token, secret) as T;
+
+export async function verifyToken(token: string) {
+  try {
+    return jwt.verify(token, SECRET) as { id: string; role: string };
+  } catch {
+    return null;
+  }
 }
+
+// (optional alias for backwards compatibility)
+export const verifyLinkToken = verifyToken;
