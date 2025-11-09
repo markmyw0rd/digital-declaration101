@@ -1,17 +1,70 @@
-// components/FormCards.tsx  (append this; keep your existing exports as-is)
+// components/FormCards.tsx
 "use client";
 
-import { useState, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
-type Role = "student" | "supervisor" | "assessor";
+/* ------------------------------------------------------------------ */
+/* Types                                                               */
+/* ------------------------------------------------------------------ */
+export type Role = "student" | "supervisor" | "assessor";
 
-/**
- * Reusable sign button that:
- *  - POSTs to /api/envelopes/[id]/sign with { role, dataUrl }
- *  - navigates to the nextUrl returned by the API (or refreshes)
- *  - prevents double submit and handles empty JSON bodies
- */
+type BaseCardProps = {
+  title?: string;
+  className?: string;
+  children?: React.ReactNode;
+};
+
+/* ------------------------------------------------------------------ */
+/* Reusable Card Shell                                                 */
+/* ------------------------------------------------------------------ */
+function CardShell({ title, className = "", children }: BaseCardProps) {
+  return (
+    <section
+      className={`rounded-xl border border-zinc-200 bg-white p-4 md:p-6 shadow-sm ${className}`}
+    >
+      {title ? (
+        <h3 className="mb-3 text-lg font-semibold text-zinc-900">{title}</h3>
+      ) : null}
+      {children}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Named Cards (exports expected by /app/e/[token]/page.tsx)           */
+/* ------------------------------------------------------------------ */
+export function StudentCard(props: BaseCardProps) {
+  return <CardShell title={props.title ?? "Student — Sign here"} {...props} />;
+}
+
+export function SupervisorCard(props: BaseCardProps) {
+  return (
+    <CardShell
+      title={props.title ?? "Supervisor — Review & Sign"}
+      {...props}
+    />
+  );
+}
+
+export function AssessorDeclaration(props: BaseCardProps) {
+  return (
+    <CardShell
+      title={props.title ?? "Assessor — Declaration"}
+      {...props}
+    />
+  );
+}
+
+export function Checklist(props: BaseCardProps) {
+  return (
+    <CardShell title={props.title ?? "Quick Assessor Checklist"} {...props} />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Reusable Sign Button                                                */
+/* ------------------------------------------------------------------ */
 export function SignButton({
   envelopeId,
   role,
@@ -22,6 +75,7 @@ export function SignButton({
 }: {
   envelopeId: string;
   role: Role;
+  /** signature dataURL (required for student/supervisor) */
   dataUrl?: string;
   disabledReason?: string;
   className?: string;
@@ -33,7 +87,7 @@ export function SignButton({
   const onClick = useCallback(async () => {
     if (busy) return;
 
-    // Require a signature image for student/supervisor roles
+    // student/supervisor must have a signature image
     if ((role === "student" || role === "supervisor") && !dataUrl) return;
 
     setBusy(true);
@@ -44,6 +98,7 @@ export function SignButton({
         body: JSON.stringify({ role, dataUrl }),
       });
 
+      // avoid JSON parse crash on empty body
       const json: any = await res.json().catch(() => ({}));
 
       if (!res.ok) {
@@ -71,13 +126,13 @@ export function SignButton({
 
   return (
     <button
-      type="button" // important: not a form submit
+      type="button"
       onClick={onClick}
       disabled={isDisabled}
       aria-busy={busy}
       title={disabledReason}
-      className={`w-full rounded-md px-4 py-3 text-white ${
-        isDisabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+      className={`w-full rounded-md bg-black px-4 py-3 text-white transition-opacity ${
+        isDisabled ? "opacity-60 cursor-not-allowed" : "hover:opacity-90"
       } ${className}`}
     >
       {busy ? "Processing…" : children}
