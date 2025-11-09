@@ -117,7 +117,7 @@ export default function Envelope({ params }: { params: { token: string } }) {
       </div>
 
       <Section title="Student — Sign here" locked={!canStudent}>
-        <StudentCard locked={!canStudent} onSign={signCurrent} />
+        <StudentCard locked={!canStudent} onSigned={signCurrent} />
         <p className="text-xs text-slate-500 mt-2">
           After you sign, your supervisor will automatically receive a link.
         </p>
