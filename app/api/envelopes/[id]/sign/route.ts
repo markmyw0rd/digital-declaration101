@@ -1,7 +1,7 @@
 // app/api/envelopes/[id]/sign/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import db from "@/lib/db"; // default export
+import { db } from "@/lib/db"; // ✅ named import
 import { sendNextLinkEmail } from "@/lib/email";
 
 type Role = "student" | "supervisor" | "assessor";
