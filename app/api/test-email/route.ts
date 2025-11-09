@@ -3,19 +3,30 @@ import { NextResponse } from "next/server";
 import { sendNextLinkEmail } from "@/lib/email";
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const to = searchParams.get("to");
-  if (!to) return NextResponse.json({ error: "Provide ?to=" }, { status: 400 });
+  const url = new URL(req.url);
+  const to = url.searchParams.get("to");
 
-  const base = (process.env.APP_URL || "").replace(/\/+$/, "");
-  const nextUrl = base ? `${base}/e/demo?role=supervisor` : "APP_URL not set";
+  if (!to) {
+    return NextResponse.json({ ok: false, error: "missing ?to=" }, { status: 400 });
+  }
 
-  const res = await sendNextLinkEmail({
-    to,
-    role: "supervisor",
-    nextUrl,
-    unitCode: "AURTTE104",
-  });
+  const base = process.env.APP_URL || "http://localhost:3000";
+  const nextUrl = `${base}/demo`;
+  const unitCode = "AURTTE104";
 
-  return NextResponse.json(res);
+  try {
+    await sendNextLinkEmail({
+      to,
+      role: "supervisor",
+      nextUrl,
+      unitCode,
+    });
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    console.error("[test-email] error", err);
+    return NextResponse.json(
+      { ok: false, error: err?.message || "send failed" },
+      { status: 500 }
+    );
+  }
 }
