@@ -1,171 +1,171 @@
 // components/FormCards.tsx
-"use client";
-
 import React from "react";
 
-/** ---------- Small shared primitives ---------- */
+/** Common props every “card” accepts */
+export type BaseCardProps = {
+  /** When true, the card is visually disabled & non-interactive */
+  locked?: boolean;
+  className?: string;
+  children?: React.ReactNode;
+};
+
+/** Signature handler used by Student & Supervisor cards */
+export type SignatureHandler = (
+  signatureDataUrl: string,
+  nextEmail: string
+) => Promise<void>;
+
+/** Generic section wrapper used on the e/[token] page */
 export function Section({
   title,
   locked = false,
   children,
+  className = "",
 }: {
   title: string;
-  /** When true, visually dim and make the section inert */
   locked?: boolean;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
     <section
-      aria-disabled={locked}
-      className={[
-        "relative rounded-xl border border-gray-200 bg-white p-4 md:p-6 shadow-sm",
-        locked ? "opacity-60 pointer-events-none" : "",
-      ].join(" ")}
+      className={
+        "mb-8 rounded-2xl border bg-white p-5 shadow-sm " +
+        (locked ? "opacity-60 pointer-events-none select-none " : "") +
+        className
+      }
+      aria-disabled={locked ? true : undefined}
     >
-      <h3 className="mb-3 text-base md:text-lg font-semibold text-gray-800">
-        {title}
-      </h3>
-      <div className="space-y-3">{children}</div>
-      {locked && (
-        <div className="absolute inset-0 rounded-xl" aria-hidden="true" />
-      )}
+      <h3 className="mb-3 text-base font-semibold text-slate-800">{title}</h3>
+      {children}
     </section>
   );
 }
 
-export function Checklist({
-  items,
-  value = [],
-  onChange,
-}: {
-  items: { id: string; label: string }[];
-  value?: string[];
-  onChange?: (next: string[]) => void;
-}) {
-  const selected = new Set(value);
+/** ---------- Student & Supervisor Cards (signing) ---------- */
+
+type SignCardProps = BaseCardProps & {
+  /** Fired after the signer submits; provide data URL + next email */
+  onSigned?: SignatureHandler;
+};
+
+export function StudentCard({ locked = false, onSigned }: SignCardProps) {
+  // Keep UI super simple so it always compiles; wire to your existing pad later
+  const [nextEmail, setNextEmail] = React.useState("");
+  const handleClick = async () => {
+    if (!onSigned) return;
+    // You’ll call your real signature pad here and pass its data URL
+    await onSigned("data:image/png;base64,stub", nextEmail.trim());
+  };
+
   return (
-    <div className="grid gap-2">
-      {items.map((it) => {
-        const checked = selected.has(it.id);
-        return (
-          <label
-            key={it.id}
-            className="flex items-center gap-3 rounded-lg border p-3"
-          >
-            <input
-              type="checkbox"
-              className="h-4 w-4"
-              checked={checked}
-              onChange={(e) => {
-                const next = new Set(selected);
-                if (e.target.checked) next.add(it.id);
-                else next.delete(it.id);
-                onChange?.(Array.from(next));
-              }}
-            />
-            <span className="text-sm md:text-base">{it.label}</span>
-          </label>
-        );
-      })}
+    <div className="space-y-3">
+      <div className="h-32 rounded-lg border bg-slate-50" aria-hidden />
+      <input
+        disabled={locked}
+        type="email"
+        placeholder="Supervisor email (next)"
+        className="w-full rounded-md border px-3 py-2 text-sm"
+        value={nextEmail}
+        onChange={(e) => setNextEmail(e.target.value)}
+      />
+      <button
+        disabled={locked}
+        onClick={handleClick}
+        className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+      >
+        Sign & Notify Supervisor
+      </button>
+    </div>
+  );
+}
+
+export function SupervisorCard({ locked = false, onSigned }: SignCardProps) {
+  const [nextEmail, setNextEmail] = React.useState("");
+  const handleClick = async () => {
+    if (!onSigned) return;
+    await onSigned("data:image/png;base64,stub", nextEmail.trim());
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="h-32 rounded-lg border bg-slate-50" aria-hidden />
+      <input
+        disabled={locked}
+        type="email"
+        placeholder="Assessor email (next)"
+        className="w-full rounded-md border px-3 py-2 text-sm"
+        value={nextEmail}
+        onChange={(e) => setNextEmail(e.target.value)}
+      />
+      <button
+        disabled={locked}
+        onClick={handleClick}
+        className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+      >
+        Sign & Notify Assessor
+      </button>
+    </div>
+  );
+}
+
+/** ---------- Assessor bits (placeholders so the page compiles) ---------- */
+
+export function AssessorDeclaration({ locked = false }: BaseCardProps) {
+  return (
+    <div
+      className={
+        "rounded-lg border bg-white p-4 " +
+        (locked ? "opacity-60 pointer-events-none" : "")
+      }
+    >
+      <p className="text-sm text-slate-700">
+        Assessor declaration area (tick boxes / notes).
+      </p>
+    </div>
+  );
+}
+
+export function Checklist({ locked = false }: BaseCardProps) {
+  return (
+    <div
+      className={
+        "rounded-lg border bg-white p-4 " +
+        (locked ? "opacity-60 pointer-events-none" : "")
+      }
+    >
+      <p className="text-sm text-slate-700">Quick Assessor Checklist …</p>
     </div>
   );
 }
 
 export function Outcome({
-  value = "NYC",
-  onChange,
-}: {
-  value?: "Competent" | "NYC";
-  onChange?: (v: "Competent" | "NYC") => void;
-}) {
+  locked = false,
+  onComplete,
+}: BaseCardProps & { onComplete?: () => void }) {
   return (
-    <div className="flex gap-4">
-      {(["Competent", "NYC"] as const).map((opt) => (
-        <label
-          key={opt}
-          className="flex items-center gap-2 rounded-lg border px-3 py-2"
+    <div
+      className={
+        "rounded-lg border bg-white p-4 " +
+        (locked ? "opacity-60 pointer-events-none" : "")
+      }
+    >
+      <div className="flex gap-2">
+        <button
+          disabled={locked}
+          onClick={onComplete}
+          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
-          <input
-            type="radio"
-            name="outcome"
-            value={opt}
-            checked={value === opt}
-            onChange={() => onChange?.(opt)}
-          />
-          <span className="text-sm md:text-base">{opt}</span>
-        </label>
-      ))}
+          Mark Competent & Generate PDF
+        </button>
+        <button
+          disabled={locked}
+          onClick={onComplete}
+          className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        >
+          Mark NYC & Send Feedback
+        </button>
+      </div>
     </div>
-  );
-}
-
-/** ---------- Role cards ---------- */
-
-type BaseCardProps = {
-  /** Accept both names; locked wins if both present */
-  locked?: boolean;
-  disabled?: boolean;
-  onSigned?: () => void;
-  children?: React.ReactNode;
-};
-
-export function StudentCard({
-  locked,
-  disabled,
-  onSigned,
-  children,
-}: BaseCardProps) {
-  const isDisabled = locked ?? disabled ?? false;
-  return (
-    <Section title="Student — Sign here" locked={isDisabled}>
-      <div className="h-40 rounded-lg border bg-gray-50" />
-      <button
-        disabled={isDisabled}
-        onClick={onSigned}
-        className="mt-3 w-full rounded-lg bg-black px-4 py-3 text-white disabled:opacity-40"
-      >
-        Sign & Notify Supervisor
-      </button>
-      {children}
-    </Section>
-  );
-}
-
-export function SupervisorCard({
-  locked,
-  disabled,
-  onSigned,
-  children,
-}: BaseCardProps) {
-  const isDisabled = locked ?? disabled ?? false;
-  return (
-    <Section title="Workplace Supervisor — Sign here" locked={isDisabled}>
-      <div className="h-40 rounded-lg border bg-gray-50" />
-      <button
-        disabled={isDisabled}
-        onClick={onSigned}
-        className="mt-3 w-full rounded-lg bg-black px-4 py-3 text-white disabled:opacity-40"
-      >
-        Sign & Notify Assessor
-      </button>
-      {children}
-    </Section>
-  );
-}
-
-export function AssessorDeclaration({
-  children,
-}: {
-  children?: React.ReactNode;
-}) {
-  return (
-    <Section title="Assessor — Declaration">
-      {children ?? (
-        <p className="text-sm text-gray-600">
-          Confirm pre-assessment checks, knowledge assessment, and practical
-          observation have been completed.
-        </p>
-      )}
-    </Section>
   );
 }
