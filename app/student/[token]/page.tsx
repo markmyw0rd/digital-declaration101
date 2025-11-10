@@ -8,20 +8,22 @@ type Params = { params: { token: string } };
 
 export default async function StudentPage({ params }: Params) {
   const payload = await verifyToken(params.token);
-  if (!payload || payload.role !== "student") return notFound();
+  if (!payload || (payload as any).role !== "student") return notFound();
 
-  const env = await db.getEnvelope(payload.id);
+  const env = await db.getEnvelope((payload as any).id);
   if (!env) return notFound();
 
   const locked = false;
+  const unitCode: string =
+    (env as any).unitCode ?? (env as any).unit_code ?? "AURTTE104";
 
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-6">
       <h2 className="text-lg font-semibold">
-        {env.unitCode} — Student Declaration
+        {unitCode} — Student Declaration
       </h2>
       <div className="text-sm text-slate-600">
-        Unit: <b>{env.unitCode}</b> • Status: <b>{env.status}</b>
+        Unit: <b>{unitCode}</b> • Status: <b>{env.status}</b>
       </div>
 
       <Section title="Student — Sign here" locked={locked}>
